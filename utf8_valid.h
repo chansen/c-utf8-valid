@@ -88,31 +88,35 @@ utf8_check(const char *src, size_t len, size_t *cursor) {
       p = (const unsigned char *)buf;
     }
 
-    v = *p++;
+    v = p[0];
     if ((v & 0x80) == 0) {
       cur += 1;
       continue;
     }
 
-    v = (v << 8) | *p++;
-    if ((v & 0xE0C0) == 0xC080 &&
-        (v & 0x1E00) != 0) {
+    v = (v << 8) | p[1];
+    if ((v & 0xE0C0) == 0xC080) {
+      v = v & 0x1E00;
+      if (v == 0)
+        break;
       cur += 2;
       continue;
     }
 
-    v = (v << 8) | *p++;
-    if ((v & 0xF0C0C0) == 0xE08080 &&
-        (v & 0x0F2000) != 0 &&
-        (v & 0x0F2000) != 0x0D2000) {
+    v = (v << 8) | p[2];
+    if ((v & 0xF0C0C0) == 0xE08080) {
+      v = v & 0x0F2000;
+      if (v == 0 || v == 0x0D2000)
+        break;
       cur += 3;
       continue;
     }
 
-    v = (v << 8) | *p++;
-    if ((v & 0xF8C0C0C0) == 0xF0808080 &&
-        (v & 0x07300000) != 0 &&
-        (v < 0xF4908080)) {
+    v = (v << 8) | p[3];
+    if ((v & 0xF8C0C0C0) == 0xF0808080) {
+      v = v & 0x07300000;
+      if (v == 0 || v > 0x04000000)
+        break;
       cur += 4;
       continue;
     }
