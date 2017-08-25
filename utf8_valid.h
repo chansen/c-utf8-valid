@@ -34,48 +34,6 @@
 extern "C" {
 #endif
 
-size_t
-utf8_maximal_subpart(const char *src, size_t len) {
-  const unsigned char *cur = (const unsigned char *)src;
-  uint32_t v;
-
-  if (len < 2)
-    return len;
-
-  v = (cur[0] << 8) | cur[1];
-  if ((v & 0xC0C0) != 0xC080)
-    return 1;
-
-  if ((v & 0x2000) == 0) {
-    v = v & 0x1E00;
-    if (v == 0)
-      return 1;
-    return 2;
-  }
-
-  if ((v & 0x1000) == 0) {
-    v = v & 0x0F20;
-    if (v == 0 || v == 0x0D20)
-      return 1;
-    if (len < 3 || (cur[2] & 0xC0) != 0x80)
-      return 2;
-    return 3;
-  }
-
-  if ((v & 0x0800) == 0) {
-    v = v & 0x0730;
-    if (v == 0 || v > 0x0400)
-      return 1;
-    if (len < 3 || (cur[2] & 0xC0) != 0x80)
-      return 2;
-    if (len < 4 || (cur[3] & 0xC0) != 0x80)
-      return 3;
-    return 4;
-  }
-
-  return 1;
-}
-
 bool
 utf8_check(const char *src, size_t len, size_t *cursor) {
   const unsigned char *cur = (const unsigned char *)src;
@@ -138,6 +96,48 @@ utf8_check(const char *src, size_t len, size_t *cursor) {
 bool
 utf8_valid(const char *src, size_t len) {
   return utf8_check(src, len, NULL);
+}
+
+size_t
+utf8_maximal_subpart(const char *src, size_t len) {
+  const unsigned char *cur = (const unsigned char *)src;
+  uint32_t v;
+
+  if (len < 2)
+    return len;
+
+  v = (cur[0] << 8) | cur[1];
+  if ((v & 0xC0C0) != 0xC080)
+    return 1;
+
+  if ((v & 0x2000) == 0) {
+    v = v & 0x1E00;
+    if (v == 0)
+      return 1;
+    return 2;
+  }
+
+  if ((v & 0x1000) == 0) {
+    v = v & 0x0F20;
+    if (v == 0 || v == 0x0D20)
+      return 1;
+    if (len < 3 || (cur[2] & 0xC0) != 0x80)
+      return 2;
+    return 3;
+  }
+
+  if ((v & 0x0800) == 0) {
+    v = v & 0x0730;
+    if (v == 0 || v > 0x0400)
+      return 1;
+    if (len < 3 || (cur[2] & 0xC0) != 0x80)
+      return 2;
+    if (len < 4 || (cur[3] & 0xC0) != 0x80)
+      return 3;
+    return 4;
+  }
+
+  return 1;
 }
 
 #ifdef __cplusplus
