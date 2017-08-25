@@ -47,21 +47,24 @@ utf8_maximal_subpart(const char *src, size_t len) {
     return 1;
 
   if ((v & 0x2000) == 0) {
-    if ((v & 0x1E00) == 0)
+    v = v & 0x1E00;
+    if (v == 0)
       return 1;
     return 2;
   }
-  else if ((v & 0x1000) == 0) {
-    if ((v & 0x0F20) == 0 ||
-        (v & 0x0F20) == 0x0D20)
+
+  if ((v & 0x1000) == 0) {
+    v = v & 0x0F20;
+    if (v == 0 || v == 0x0D20)
       return 1;
     if (len < 3 || (cur[2] & 0xC0) != 0x80)
       return 2;
     return 3;
   }
-  else {
-    if ((v & 0x0730) == 0 ||
-        (v > 0xF48F))
+
+  if ((v & 0x0800) == 0) {
+    v = v & 0x0730;
+    if (v == 0 || v > 0x0400)
       return 1;
     if (len < 3 || (cur[2] & 0xC0) != 0x80)
       return 2;
@@ -69,6 +72,8 @@ utf8_maximal_subpart(const char *src, size_t len) {
       return 3;
     return 4;
   }
+
+  return 1;
 }
 
 bool
