@@ -66,17 +66,19 @@ bool
 utf8_check(const char *src, size_t len, size_t *cursor) {
   const unsigned char *cur = (const unsigned char *)src;
   const unsigned char *end = cur + len;
-  const unsigned char *p;
   unsigned char buf[4];
   uint32_t v;
 
-  for (p = cur;;) {
+  while (1) {
+    const unsigned char *p;
     if (cur >= end - 3) {
       if (cur == end)
         break;
       memset(buf, 0, 4);
       memcpy(buf, cur, end - cur);
       p = (const unsigned char *)buf;
+    } else {
+      p = cur;
     }
 
     v = p[0];
