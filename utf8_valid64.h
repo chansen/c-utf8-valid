@@ -357,7 +357,7 @@ static inline size_t utf8_maximal_subpart(const char* src, size_t len) {
  * the caller can resume from the next byte without reinitializing.
  */
 typedef struct {
-  uint32_t state;
+  uint64_t state;
 } utf8_stream_t;
 
 static inline void
