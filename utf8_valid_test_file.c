@@ -5,9 +5,11 @@
 #include <ctype.h>
 #include <assert.h>
 
-#define UTF8_VALID_FAST_PATH4 1
-#define UTF8_VALID_FAST_PATH16 1
-#include "utf8_valid.h"
+#ifdef UTF8_VALID_64
+#  include "utf8_valid64.h"
+#else
+#  include "utf8_valid.h"
+#endif
 
 static size_t TestCount = 0;
 static size_t TestFailed = 0;
@@ -61,7 +63,9 @@ static void run_test_line(char* line, unsigned lineno) {
     return;
   *p++ = '\0';
 
-  /* Trim trailing whitespace from kind */
+  /* Trim leading and trailing whitespace from kind */
+  while (*kind == ' ' || *kind == '\t')
+    kind++;
   char* end = kind + strlen(kind) - 1;
   while (end > kind && (*end == ' ' || *end == '\t'))
     *end-- = '\0';

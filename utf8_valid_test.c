@@ -3,7 +3,13 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
-#include "utf8_valid.h"
+
+#ifdef UTF8_VALID_64
+#  include "utf8_valid64.h"
+#else
+#  include "utf8_valid.h"
+#endif
+
 
 /*
  *  UTF-8
