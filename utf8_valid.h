@@ -337,6 +337,71 @@ static inline size_t utf8_maximal_subpart(const char* src, size_t len) {
   return len;
 }
 
+/*
+ * Streaming API
+ *
+ * utf8_stream_t holds the DFA state between calls. Initialize with
+ * utf8_stream_init() before the first call to utf8_stream_check().
+ *
+ * utf8_stream_check() validates the next chunk of a UTF-8 stream and
+ * returns the number of bytes forming complete, valid sequences. Any
+ * remaining bytes at the end of the chunk (an incomplete sequence
+ * crossing a chunk boundary) must be prepended to the next chunk by
+ * the caller.
+ *
+ * If eof is true and the stream does not end on a sequence boundary,
+ * the input is treated as ill-formed.
+ *
+ * On error, (size_t)-1 is returned and *cursor, if non-NULL, is set
+ * to the byte offset of the start of the invalid or truncated sequence
+ * within src. The stream state is automatically reset to S_ACCEPT so
+ * the caller can resume from the next byte without reinitializing.
+ */
+typedef struct {
+  uint32_t state;
+} utf8_stream_t;
+
+static inline void
+utf8_stream_init(utf8_stream_t *s) {
+  s->state = S_ACCEPT;
+}
+
+static inline size_t utf8_stream_check(utf8_stream_t* s,
+                                       const char* src,
+                                       size_t len,
+                                       bool eof,
+                                       size_t* cursor) {
+  const unsigned char* p = (const unsigned char*)src;
+  uint32_t state = s->state;
+  size_t last_accept = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    state = (utf8_dfa[p[i]] >> state) & 31;
+    if (state == S_ACCEPT)
+      last_accept = i + 1;
+    else if (state == S_ERROR) {
+      s->state = S_ACCEPT;
+      if (cursor)
+        *cursor = i;
+      return (size_t)-1;
+    }
+  }
+
+  s->state = state;
+
+  if (state != S_ACCEPT) {
+    if (eof) {
+      s->state = S_ACCEPT;
+      if (cursor)
+        *cursor = last_accept;
+      return (size_t)-1;
+    }
+    return last_accept;
+  }
+
+  return len;
+}
+
 #undef S_ACCEPT
 #undef S_ERROR
 

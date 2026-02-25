@@ -34,6 +34,28 @@ size_t utf8_maximal_subpart(const char *src, size_t len);
 
 **`utf8_maximal_subpart`** returns the length of the maximal subpart of the ill-formed sequence starting at `src`, as defined by Unicode 6.3 Table 3-8. The return value is always at least 1. This is intended to be called after `utf8_check` reports failure, pointing `src` at the cursor position.
 
+## Streaming API
+```c
+typedef struct { uint32_t state; } utf8_stream_t;
+
+void   utf8_stream_init(utf8_stream_t *s);
+size_t utf8_stream_check(utf8_stream_t* s,
+                         const char* src,
+                         size_t len,
+                         bool eof,
+                         size_t* cursor);
+```
+
+For validating input that arrives in chunks.
+
+**`utf8_stream_init`** initializes the stream state. Must be called before the first `utf8_stream_check`.
+
+**`utf8_stream_check`** validates the next chunk and returns the number of bytes forming complete, valid sequences. Any bytes beyond the returned count represent an incomplete sequence crossing the chunk boundary and must be prepended to the next chunk by the caller.
+
+If `eof` is `true` and the stream does not end on a sequence boundary, the trailing bytes are treated as ill-formed.
+
+On error, returns `(size_t)-1` and sets `*cursor` (if non-NULL) to the byte offset of the invalid or truncated sequence within `src`. The stream is automatically reset to the initial state so the caller can resume from the next byte without reinitializing.
+
 ## Requirements
 
 - C99 or later
