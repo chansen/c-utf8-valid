@@ -371,7 +371,7 @@ static inline size_t utf8_stream_check(utf8_stream_t* s,
                                        bool eof,
                                        size_t* cursor) {
   const unsigned char* p = (const unsigned char*)src;
-  uint32_t state = s->state;
+  uint64_t state = s->state;
   size_t last_accept = 0;
 
   for (size_t i = 0; i < len; i++) {
