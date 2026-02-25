@@ -83,6 +83,12 @@
 #include <stdbool.h>
 #include <string.h>
 
+#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
+#  include <emmintrin.h>
+#elif defined(__aarch64__)
+#  include <arm_neon.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -249,12 +255,6 @@ static const uint64_t utf8_dfa[256] = {
 #undef LEAD3_ROW
 #undef LEAD4_ROW
 #undef ERROR_ROW
-
-#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
-#  include <emmintrin.h>
-#elif defined(__aarch64__)
-#  include <arm_neon.h>
-#endif
 
 static inline bool utf8_check_ascii_block16(const unsigned char *s) {
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
