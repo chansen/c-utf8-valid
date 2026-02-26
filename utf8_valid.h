@@ -31,13 +31,12 @@
  * by an SMT solver so all transition rows fit in a plain uint32_t.
  *
  * S_ERROR = 0: error transitions contribute nothing to a row value
- * since (S_ERROR << offset) == 0 for any offset. Unset fields read
- * back as 0 = S_ERROR automatically.
+ * since (S_ERROR << offset) == 0 for any offset.
  *
  * State offsets (bit positions within each row):
  *
- *   S_ACCEPT =  6  Start / Accept
  *   S_ERROR  =  0  Invalid byte seen (absorbing)
+ *   S_ACCEPT =  6  Start / Accept
  *   S_TAIL1  = 16  Expect 1 more tail byte  (80-BF -> S_ACCEPT)
  *   S_TAIL2  =  1  Expect 2 more tail bytes (80-BF -> S_TAIL1)
  *   S_E0     = 19  After E0:    next tail must be A0-BF -> S_TAIL1
@@ -99,10 +98,10 @@
 extern "C" {
 #endif
 
-#define S_ACCEPT  6
 #define S_ERROR   0
-#define S_TAIL2   1
+#define S_ACCEPT  6
 #define S_TAIL1  16
+#define S_TAIL2   1
 #define S_E0     19
 #define S_ED     25
 #define S_F0     11

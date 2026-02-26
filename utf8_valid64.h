@@ -27,10 +27,13 @@
 /*
  * Shift-based DFA for UTF-8 validation.
  *
- * 9 states (pre-multiplied by 6, used directly as shift amounts):
+ * S_ERROR = 0: error transitions contribute nothing to a row value
+ * since (S_ERROR << offset) == 0 for any offset.
  *
- *   S_ACCEPT =  0  Start / Accept
- *   S_ERROR  =  6  Invalid byte seen (absorbing)
+ * 9 states (shift amounts, multiples of 6 except S_ERROR which is 0):
+ *
+ *   S_ERROR  =  0  Invalid byte seen (absorbing)
+ *   S_ACCEPT =  6  Start / Accept
  *   S_TAIL1  = 12  Expect 1 more tail byte  (80-BF -> S_ACCEPT)
  *   S_TAIL2  = 18  Expect 2 more tail bytes (80-BF -> S_TAIL1)
  *   S_E0     = 24  After E0:    next tail must be A0-BF -> S_TAIL1
@@ -93,8 +96,8 @@
 extern "C" {
 #endif
 
-#define S_ACCEPT  0
-#define S_ERROR   6
+#define S_ERROR   0
+#define S_ACCEPT  6
 #define S_TAIL1  12
 #define S_TAIL2  18
 #define S_E0     24

@@ -74,13 +74,13 @@ The DFA has 9 states. Each state is assigned a bit offset within a 32-bit intege
 state = (dfa[byte] >> state) & 31;
 ```
 
-The key insight that makes 32-bit packing possible: the error state is fixed at bit offset 0. Since error transitions shift a zero value into the row, they contribute nothing regardless of source state. This means only the non-error transitions consume bit space, and the SMT solver only needs to find offsets for the remaining 8 states that fit without collision inside 32 bits.
+The key insight that makes 32-bit packing possible: the error state is fixed at bit offset 0. Since error transitions shift a zero value into the row, they contribute nothing regardless of source state. This means only the non-error transitions consume bit space, and the SMT solver only needs to find offsets for the remaining 8 states that fit without collision inside 32 bits. The `DFA_ROW()` macro constructs each table entry directly from named state constants.
 
 The fast path scans 16 bytes at a time, skipping the DFA entirely for pure ASCII chunks.
 
 ### 64-bit variant
 
-`utf8_valid64.h` provides the same API using a 64-bit table. In this variant the 9 state offsets are fixed multiples of 6 (0, 6, 12, ..., 48), fitting neatly in 54 bits. No solver is needed; the `DFA_ROW()` macro constructs each entry directly. This variant is provided for reference and further development.
+`utf8_valid64.h` provides the same API using a 64-bit table. Both variants share the same state layout with `S_ERROR = 0` and `S_ACCEPT = 6`. The remaining 7 states are at fixed multiples of 6 (12, 18, ..., 48), using 54 bits of the 64-bit row with 10 bits of headroom for future state additions. No solver is needed; the `DFA_ROW()` macro constructs each entry directly. This variant is provided for reference and further development.
 
 ## License
 
