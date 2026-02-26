@@ -74,7 +74,7 @@ The DFA has 9 states. Each state is assigned a bit offset within a 32-bit intege
 state = (dfa[byte] >> state) & 31;
 ```
 
-The key insight that makes 32-bit packing possible: the error state is fixed at offset 0. Error transitions contribute nothing to a row value (OR with 0), so each row only needs to encode the non-error transitions. The SMT solver finds a set of offsets for the remaining 8 states such that all transition windows fit without collision inside 32 bits.
+The key insight that makes 32-bit packing possible: the error state is fixed at bit offset 0. Since error transitions shift a zero value into the row, they contribute nothing regardless of source state. This means only the non-error transitions consume bit space, and the SMT solver only needs to find offsets for the remaining 8 states that fit without collision inside 32 bits.
 
 The fast path scans 16 bytes at a time, skipping the DFA entirely for pure ASCII chunks.
 

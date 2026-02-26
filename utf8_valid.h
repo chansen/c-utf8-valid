@@ -30,9 +30,9 @@
  * Same 9-state DFA as the 64-bit version, but state offsets are chosen
  * by an SMT solver so all transition rows fit in a plain uint32_t.
  *
- * S_ERROR = 0: error transitions contribute nothing to a row (OR with 0),
- * so each row is built by OR-ing (target_offset << source_offset) for
- * non-error transitions only. Unset fields read back as 0 = S_ERROR.
+ * S_ERROR = 0: error transitions contribute nothing to a row value
+ * since (S_ERROR << offset) == 0 for any offset. Unset fields read
+ * back as 0 = S_ERROR automatically.
  *
  * State offsets (bit positions within each row):
  *
@@ -111,29 +111,36 @@ extern "C" {
 
 /* clang-format off */
 
-/* Encode one non-error transition: when in state src, go to state tgt. */
-#define T(src, tgt) ((uint32_t)(tgt) << (src))
+#define DFA_ROW(accept,error,tail1,tail2,e0,ed,f0,f1_f3,f4) \
+  ( ((uint32_t)(accept) << S_ACCEPT) \
+  | ((uint32_t)(error)  << S_ERROR) \
+  | ((uint32_t)(tail1)  << S_TAIL1) \
+  | ((uint32_t)(tail2)  << S_TAIL2) \
+  | ((uint32_t)(e0)     << S_E0) \
+  | ((uint32_t)(ed)     << S_ED) \
+  | ((uint32_t)(f0)     << S_F0) \
+  | ((uint32_t)(f1_f3)  << S_F1_F3) \
+  | ((uint32_t)(f4)     << S_F4) )
 
-#define ASCII_ROW T(S_ACCEPT, S_ACCEPT)
-#define LEAD2_ROW T(S_ACCEPT, S_TAIL1)
-#define LEAD3_ROW T(S_ACCEPT, S_TAIL2)
-#define LEAD4_ROW T(S_ACCEPT, S_F1_F3)
-#define E0_ROW    T(S_ACCEPT, S_E0)
-#define ED_ROW    T(S_ACCEPT, S_ED)
-#define F0_ROW    T(S_ACCEPT, S_F0)
-#define F4_ROW    T(S_ACCEPT, S_F4)
-#define ERROR_ROW 0u
+#define ERR S_ERROR
+
+#define ASCII_ROW DFA_ROW(S_ACCEPT,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR)
+#define LEAD2_ROW DFA_ROW(S_TAIL1,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR)
+#define LEAD3_ROW DFA_ROW(S_TAIL2,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR)
+#define LEAD4_ROW DFA_ROW(S_F1_F3,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR)
+#define ERROR_ROW DFA_ROW(ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR)
 
 /*
  * Continuation byte rows.
+ * Columns: ACCEPT  ERROR  TAIL1      TAIL2      E0        ED        F0         F1_F3      F4
  *
- * 80-8F: TAIL1->ACCEPT, TAIL2->TAIL1, ED->TAIL1, F1_F3->TAIL2, F4->TAIL2
- * 90-9F: TAIL1->ACCEPT, TAIL2->TAIL1, ED->TAIL1, F0->TAIL2,    F1_F3->TAIL2
- * A0-BF: TAIL1->ACCEPT, TAIL2->TAIL1, E0->TAIL1, F0->TAIL2,    F1_F3->TAIL2
+ * 80-8F:   ERR     ERR    ->ACCEPT   ->TAIL1    ->ERR     ->TAIL1   ->ERR      ->TAIL2    ->TAIL2
+ * 90-9F:   ERR     ERR    ->ACCEPT   ->TAIL1    ->ERR     ->TAIL1   ->TAIL2    ->TAIL2    ->ERR
+ * A0-BF:   ERR     ERR    ->ACCEPT   ->TAIL1    ->TAIL1   ->ERR     ->TAIL2    ->TAIL2    ->ERR
  */
-#define CONT_80_8F  (T(S_TAIL1,S_ACCEPT) | T(S_TAIL2,S_TAIL1) | T(S_ED,S_TAIL1)  | T(S_F1_F3,S_TAIL2) | T(S_F4,S_TAIL2))
-#define CONT_90_9F  (T(S_TAIL1,S_ACCEPT) | T(S_TAIL2,S_TAIL1) | T(S_ED,S_TAIL1)  | T(S_F0,S_TAIL2)    | T(S_F1_F3,S_TAIL2))
-#define CONT_A0_BF  (T(S_TAIL1,S_ACCEPT) | T(S_TAIL2,S_TAIL1) | T(S_E0,S_TAIL1)  | T(S_F0,S_TAIL2)    | T(S_F1_F3,S_TAIL2))
+#define CONT_80_8F DFA_ROW(ERR,ERR,S_ACCEPT,S_TAIL1,ERR,    S_TAIL1,ERR,     S_TAIL2,S_TAIL2)
+#define CONT_90_9F DFA_ROW(ERR,ERR,S_ACCEPT,S_TAIL1,ERR,    S_TAIL1,S_TAIL2, S_TAIL2,ERR)
+#define CONT_A0_BF DFA_ROW(ERR,ERR,S_ACCEPT,S_TAIL1,S_TAIL1,ERR,    S_TAIL2, S_TAIL2,ERR)
 
 static const uint32_t utf8_dfa[256] = {
   // 00-7F
@@ -206,7 +213,7 @@ static const uint32_t utf8_dfa[256] = {
   [0xDE]=LEAD2_ROW,[0xDF]=LEAD2_ROW,
 
   // E0: first cont A0-BF
-  [0xE0]=E0_ROW,
+  [0xE0]=DFA_ROW(S_E0,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR),
 
   // E1-EC: 3-byte lead
   [0xE1]=LEAD3_ROW,[0xE2]=LEAD3_ROW,[0xE3]=LEAD3_ROW,[0xE4]=LEAD3_ROW,
@@ -214,47 +221,45 @@ static const uint32_t utf8_dfa[256] = {
   [0xE9]=LEAD3_ROW,[0xEA]=LEAD3_ROW,[0xEB]=LEAD3_ROW,[0xEC]=LEAD3_ROW,
 
   // ED: first cont 80-9F
-  [0xED]=ED_ROW,
+  [0xED]=DFA_ROW(S_ED,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR),
 
   // EE-EF: 3-byte lead
   [0xEE]=LEAD3_ROW,[0xEF]=LEAD3_ROW,
 
   // F0: first cont 90-BF
-  [0xF0]=F0_ROW,
+  [0xF0]=DFA_ROW(S_F0,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR),
 
   // F1-F3: 4-byte lead
   [0xF1]=LEAD4_ROW,[0xF2]=LEAD4_ROW,[0xF3]=LEAD4_ROW,
 
   // F4: first cont 80-8F
-  [0xF4]=F4_ROW,
+  [0xF4]=DFA_ROW(S_F4,ERR,ERR,ERR,ERR,ERR,ERR,ERR,ERR),
 
   // F5-FF: invalid
   [0xF5]=ERROR_ROW,[0xF6]=ERROR_ROW,[0xF7]=ERROR_ROW,[0xF8]=ERROR_ROW,
   [0xF9]=ERROR_ROW,[0xFA]=ERROR_ROW,[0xFB]=ERROR_ROW,[0xFC]=ERROR_ROW,
   [0xFD]=ERROR_ROW,[0xFE]=ERROR_ROW,[0xFF]=ERROR_ROW,
 };
+
 /* clang-format on */
 
-#undef T
-#undef S_TAIL2
 #undef S_TAIL1
+#undef S_TAIL2
 #undef S_E0
 #undef S_ED
 #undef S_F0
 #undef S_F1_F3
 #undef S_F4
 
+#undef ERR
+#undef DFA_ROW
 #undef ASCII_ROW
 #undef CONT_80_8F
 #undef CONT_90_9F
 #undef CONT_A0_BF
 #undef LEAD2_ROW
-#undef E0_ROW
 #undef LEAD3_ROW
-#undef ED_ROW
-#undef F0_ROW
 #undef LEAD4_ROW
-#undef F4_ROW
 #undef ERROR_ROW
 
 static inline bool utf8_check_ascii_block16(const unsigned char *s) {

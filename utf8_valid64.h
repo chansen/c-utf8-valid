@@ -106,15 +106,15 @@ extern "C" {
 /* clang-format off */
 
 #define DFA_ROW(accept,error,tail1,tail2,e0,ed,f0,f1_f3,f4) \
-  ( ((uint64_t)(accept) <<  0) \
-  | ((uint64_t)(error)  <<  6) \
-  | ((uint64_t)(tail1)  << 12) \
-  | ((uint64_t)(tail2)  << 18) \
-  | ((uint64_t)(e0)     << 24) \
-  | ((uint64_t)(ed)     << 30) \
-  | ((uint64_t)(f0)     << 36) \
-  | ((uint64_t)(f1_f3)  << 42) \
-  | ((uint64_t)(f4)     << 48) )
+  ( ((uint64_t)(accept) << S_ACCEPT) \
+  | ((uint64_t)(error)  << S_ERROR) \
+  | ((uint64_t)(tail1)  << S_TAIL1) \
+  | ((uint64_t)(tail2)  << S_TAIL2) \
+  | ((uint64_t)(e0)     << S_E0) \
+  | ((uint64_t)(ed)     << S_ED) \
+  | ((uint64_t)(f0)     << S_F0) \
+  | ((uint64_t)(f1_f3)  << S_F1_F3) \
+  | ((uint64_t)(f4)     << S_F4) )
 
 #define ERR S_ERROR
 
