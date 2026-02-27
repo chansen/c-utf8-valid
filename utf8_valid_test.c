@@ -450,6 +450,13 @@ test_streaming() {
       TestFailed++;
     }
   }
+
+  /* 17. P1: cursor on error reports last_accept, not the error byte index */
+  utf8_stream_init(&st);
+  STREAM_ERR("P1 lead then invalid cont", &st, "\xF3\xC5", 2, false, 0);
+
+  utf8_stream_init(&st);
+  STREAM_ERR("P1 valid seq then lead+invalid", &st, "\xC3\xA9\xF3\xC5", 4, false, 2);
 }
 
 int

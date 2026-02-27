@@ -386,7 +386,7 @@ static inline size_t utf8_stream_check(utf8_stream_t* s,
     else if (state == S_ERROR) {
       s->state = S_ACCEPT;
       if (cursor)
-        *cursor = i;
+        *cursor = last_accept;
       return (size_t)-1;
     }
   }
