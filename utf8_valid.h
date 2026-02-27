@@ -88,9 +88,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && (_M_IX86_FP >= 2))
+#  define UTF8_VALID_HAS_SSE2 1
 #  include <emmintrin.h>
 #elif defined(__aarch64__)
+#  define UTF8_VALID_HAS_NEON 1
 #  include <arm_neon.h>
 #endif
 
@@ -262,10 +264,10 @@ static const uint32_t utf8_dfa[256] = {
 #undef ERROR_ROW
 
 static inline bool utf8_check_ascii_block16(const unsigned char *s) {
-#if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
+#if defined(UTF8_VALID_HAS_SSE2)
   __m128i v = _mm_loadu_si128((const __m128i *)s);
   return _mm_movemask_epi8(v) == 0;
-#elif defined(__aarch64__)
+#elif defined(UTF8_VALID_HAS_NEON)
   uint8x16_t v = vld1q_u8(s);
   uint8x16_t high = vshrq_n_u8(v, 7);
   return vmaxvq_u8(high) == 0;
