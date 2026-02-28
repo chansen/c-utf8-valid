@@ -350,6 +350,36 @@ static inline bool utf8_valid(const char *src, size_t len) {
   return utf8_check(src, len, NULL);
 }
 
+static inline bool utf8_check_constant(const char* src,
+                                       size_t slen,
+                                       size_t* cursor) {
+  const unsigned char* s = (const unsigned char*)src;
+  size_t len = slen;
+  uint64_t state = S_ACCEPT;
+
+  // Process 16-byte chunks
+  while (len >= 16) {
+    state = utf8_dfa_run(state, s, 16);
+    s += 16;
+    len -= 16;
+  }
+
+  state = utf8_dfa_run(state, s, len);
+  if (state == S_ACCEPT) {
+    if (cursor)
+      *cursor = slen;
+    return true;
+  }
+
+  if (cursor)
+    *cursor = utf8_maximal_prefix(src, slen);
+  return false;
+}
+
+static inline bool utf8_valid_constant(const char* src, size_t len) {
+  return utf8_check_constant(src, len, NULL);
+}
+
 /*
  * Streaming API
  *

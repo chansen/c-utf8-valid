@@ -459,6 +459,50 @@ test_streaming() {
   STREAM_ERR("P1 valid seq then lead+invalid", &st, "\xC3\xA9\xF3\xC5", 4, false, 2);
 }
 
+void
+test_constant() {
+  size_t cursor;
+
+  // Valid inputs
+  TestCount++;
+  if (!utf8_valid_constant("hello", 5)) {
+    printf("utf8_valid_constant: ASCII rejected\n");
+    TestFailed++;
+  }
+
+  TestCount++;
+  if (!utf8_valid_constant("\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80", 9)) {
+    printf("utf8_valid_constant: multibyte rejected\n");
+    TestFailed++;
+  }
+
+  // Invalid inputs
+  TestCount++;
+  if (utf8_valid_constant("\x80", 1)) {
+    printf("utf8_valid_constant: bare continuation accepted\n");
+    TestFailed++;
+  }
+
+  TestCount++;
+  if (utf8_valid_constant("\xED\xA0\x80", 3)) {
+    printf("utf8_valid_constant: surrogate accepted\n");
+    TestFailed++;
+  }
+
+  // Cursor
+  TestCount++;
+  if (utf8_check_constant("ab\x80", 3, &cursor) || cursor != 2) {
+    printf("utf8_check_constant: cursor == %zu, expected 2\n", cursor);
+    TestFailed++;
+  }
+
+  TestCount++;
+  if (utf8_check_constant("\xC3\xA9\xF3\xC5", 4, &cursor) || cursor != 2) {
+    printf("utf8_check_constant: cursor == %zu, expected 2\n", cursor);
+    TestFailed++;
+  }
+}
+
 int
 main(int argc, char **argv) {
   test_empty();
@@ -471,6 +515,7 @@ main(int argc, char **argv) {
   test_mixed_sequences();
   test_5_and_6_byte_sequences();
   test_streaming();
+  test_constant();
 
   if (TestFailed)
     printf("Failed %zu tests of %zu.\n", TestFailed, TestCount);

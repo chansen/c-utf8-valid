@@ -24,7 +24,9 @@ size_t n = utf8_maximal_subpart(src, len);
 
 ```c
 bool   utf8_valid(const char *src, size_t len);
+bool   utf8_valid_constant(const char *src, size_t len);
 bool   utf8_check(const char *src, size_t len, size_t *cursor);
+bool   utf8_check_constant(const char *src, size_t len, size_t *cursor);
 size_t utf8_maximal_subpart(const char *src, size_t len);
 ```
 
@@ -33,6 +35,12 @@ size_t utf8_maximal_subpart(const char *src, size_t len);
 **`utf8_check`** returns `true` if valid. On failure, if `cursor` is non-NULL, sets `*cursor` to the length of the maximal valid prefix — i.e. the byte offset of the first invalid sequence.
 
 **`utf8_maximal_subpart`** returns the length of the maximal subpart of the ill-formed sequence starting at `src`, as defined by Unicode 6.3 Table 3-8. The return value is always at least 1. This is intended to be called after `utf8_check` reports failure, pointing `src` at the cursor position.
+
+**`utf8_valid_constant`** and **`utf8_check_constant`** are timing-safe
+variants that process every byte through the DFA without the ASCII fast
+path. Execution time is independent of input content, making them suitable
+for security-sensitive contexts where timing side channels are a concern.
+Otherwise identical in behaviour to `utf8_valid` and `utf8_check`.
 
 ## Streaming API
 ```c
