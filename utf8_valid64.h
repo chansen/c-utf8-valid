@@ -261,6 +261,49 @@ static const uint64_t utf8_dfa[256] = {
 #undef LEAD4_ROW
 #undef ERROR_ROW
 
+static inline uint64_t utf8_dfa_step(uint64_t state, unsigned char c) {
+  return (utf8_dfa[c] >> state) & 63;
+}
+
+static inline uint64_t utf8_dfa_run(uint64_t state,
+                                    const unsigned char* src,
+                                    size_t len) {
+  for (size_t i = 0; i < len; i++)
+    state = utf8_dfa_step(state, src[i]);
+  return state;
+}
+
+static inline size_t utf8_maximal_subpart(const char* src, size_t len) {
+  const unsigned char* s = (const unsigned char*)src;
+  uint64_t state = S_ACCEPT;
+
+  for (size_t i = 0; i < len; i++) {
+    state = utf8_dfa_step(state, s[i]);
+    switch (state) {
+      case S_ACCEPT:
+        return i + 1;
+      case S_ERROR:
+        return i > 0 ? i : 1;
+    }
+  }
+  return len;
+}
+
+static inline size_t utf8_maximal_prefix(const char* src, size_t len) {
+  const unsigned char* s = (const unsigned char*)src;
+  uint64_t state = S_ACCEPT;
+  size_t prefix = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    state = utf8_dfa_step(state, s[i]);
+    if (state == S_ACCEPT)
+      prefix = i + 1;
+    else if (state == S_ERROR)
+      break;
+  }
+  return prefix;
+}
+
 static inline bool utf8_check_ascii_block16(const unsigned char *s) {
 #if defined(UTF8_VALID_HAS_SSE2)
   __m128i v = _mm_loadu_si128((const __m128i *)s);
@@ -285,60 +328,26 @@ static inline bool utf8_check(const char* src, size_t slen, size_t* cursor) {
 
   // Process 16-byte chunks; skip DFA when state is clean and chunk is ASCII
   while (len >= 16) {
-    if (state != S_ACCEPT || !utf8_check_ascii_block16(s)) {
-      for (size_t i = 0; i < 16; i++)
-        state = (utf8_dfa[s[i]] >> state) & 63;
-    }
+    if (state != S_ACCEPT || !utf8_check_ascii_block16(s))
+      state = utf8_dfa_run(state, s, 16);
     s += 16;
     len -= 16;
   }
 
-  for (size_t i = 0; i < len; i++)
-    state = (utf8_dfa[s[i]] >> state) & 63;
-
+  state = utf8_dfa_run(state, s, len);
   if (state == S_ACCEPT) {
     if (cursor)
       *cursor = slen;
     return true;
   }
 
-  if (!cursor)
-    return false;
-
-  s = (const unsigned char*)src;
-  len = slen;
-
-  size_t off = 0;
-  state = S_ACCEPT;
-  for (size_t i = 0; i < len; i++) {
-    state = (utf8_dfa[s[i]] >> state) & 63;
-    if (state == S_ACCEPT)
-      off = i + 1;
-    else if (state == S_ERROR)
-      break;
-  }
-  *cursor = off;
+  if (cursor)
+    *cursor = utf8_maximal_prefix(src, slen);
   return false;
 }
 
 static inline bool utf8_valid(const char *src, size_t len) {
   return utf8_check(src, len, NULL);
-}
-
-static inline size_t utf8_maximal_subpart(const char* src, size_t len) {
-  const unsigned char* s = (const unsigned char*)src;
-  uint64_t state = S_ACCEPT;
-
-  for (size_t i = 0; i < len; i++) {
-    state = (utf8_dfa[s[i]] >> state) & 63;
-    switch (state) {
-      case S_ACCEPT:
-        return i + 1;
-      case S_ERROR:
-        return i > 0 ? i : 1;
-    }
-  }
-  return len;
 }
 
 /*
@@ -380,7 +389,7 @@ static inline size_t utf8_stream_check(utf8_stream_t* s,
   size_t last_accept = 0;
 
   for (size_t i = 0; i < len; i++) {
-    state = (utf8_dfa[p[i]] >> state) & 63;
+    state = utf8_dfa_step(state, p[i]);
     if (state == S_ACCEPT)
       last_accept = i + 1;
     else if (state == S_ERROR) {
