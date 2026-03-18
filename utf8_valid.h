@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017 Christian Hansen <chansen@cpan.org>
+ * Copyright (c) 2017-2026 Christian Hansen <chansen@cpan.org>
  * <https://github.com/chansen/c-utf8-valid>
  * All rights reserved.
  * 
@@ -26,159 +26,138 @@
 #ifndef UTF8_VALID_H
 #define UTF8_VALID_H
 #include <stddef.h>
-#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
+
+#if defined(UTF8_DFA32_H) && defined(UTF8_DFA64_H)
+#  error "utf8_dfa32.h and utf8_dfa64.h are mutually exclusive"
+#elif !defined(UTF8_DFA32_H) && !defined(UTF8_DFA64_H)
+#  error "include utf8_dfa32.h or utf8_dfa64.h before utf8_valid.h"
+#endif
+
+#ifdef UTF8_VALID_USE_SIMD
+#  if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && (_M_IX86_FP >= 2))
+#    define UTF8_VALID_HAS_SSE2 1
+#    include <emmintrin.h>
+#  elif defined(__aarch64__)
+#    define UTF8_VALID_HAS_NEON 1
+#    include <arm_neon.h>
+#  endif
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
- *    UTF-8 Encoding Form
- *
- *    U+0000..U+007F       0xxxxxxx
- *    U+0080..U+07FF       110xxxxx 10xxxxxx
- *    U+0800..U+FFFF       1110xxxx 10xxxxxx 10xxxxxx
- *   U+10000..U+10FFFF     11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
- *
- *
- *    U+0000..U+007F       00..7F
- *                      N  C0..C1  80..BF                   1100000x 10xxxxxx
- *    U+0080..U+07FF       C2..DF  80..BF
- *                      N  E0      80..9F  80..BF           11100000 100xxxxx
- *    U+0800..U+0FFF       E0      A0..BF  80..BF
- *    U+1000..U+CFFF       E1..EC  80..BF  80..BF
- *    U+D000..U+D7FF       ED      80..9F  80..BF
- *                      S  ED      A0..BF  80..BF           11101101 101xxxxx
- *    U+E000..U+FFFF       EE..EF  80..BF  80..BF
- *                      N  F0      80..8F  80..BF  80..BF   11110000 1000xxxx
- *   U+10000..U+3FFFF      F0      90..BF  80..BF  80..BF
- *   U+40000..U+FFFFF      F1..F3  80..BF  80..BF  80..BF
- *  U+100000..U+10FFFF     F4      80..8F  80..BF  80..BF   11110100 1000xxxx
- *
- *  Legend:
- *    N = Non-shortest form
- *    S = Surrogates
- */
+static inline size_t utf8_maximal_subpart(const char* src, size_t len) {
+  const unsigned char* s = (const unsigned char*)src;
+  utf8_dfa_state_t state = UTF8_DFA_ACCEPT;
 
-bool
-utf8_check(const char *src, size_t len, size_t *cursor) {
-  const unsigned char *cur = (const unsigned char *)src;
-  const unsigned char *end = cur + len;
-  unsigned char buf[4];
-  uint32_t v;
-
-  while (1) {
-    const unsigned char *p;
-    if (cur >= end - 3) {
-      if (cur == end)
-        break;
-      memset(buf, 0, 4);
-      memcpy(buf, cur, end - cur);
-      p = (const unsigned char *)buf;
-    } else {
-      p = cur;
+  for (size_t i = 0; i < len; i++) {
+    state = utf8_dfa_step(state, s[i]);
+    switch (state) {
+      case UTF8_DFA_ACCEPT:
+        return i + 1;
+      case UTF8_DFA_REJECT:
+        return i > 0 ? i : 1;
     }
+  }
+  return len;
+}
 
-    v = p[0];
-    /* 0xxxxxxx */
-    if ((v & 0x80) == 0) {
-      cur += 1;
-      continue;
-    }
+static inline size_t utf8_maximal_prefix(const char* src, size_t len) {
+  const unsigned char* s = (const unsigned char*)src;
+  utf8_dfa_state_t state = UTF8_DFA_ACCEPT;
+  size_t prefix = 0;
 
-    v = (v << 8) | p[1];
-    /* 110xxxxx 10xxxxxx */
-    if ((v & 0xE0C0) == 0xC080) {
-      /* Ensure that the top 4 bits is not zero */
-      v = v & 0x1E00;
-      if (v == 0)
-        break;
-      cur += 2;
-      continue;
-    }
+  for (size_t i = 0; i < len; i++) {
+    state = utf8_dfa_step(state, s[i]);
+    if (state == UTF8_DFA_ACCEPT)
+      prefix = i + 1;
+    else if (state == UTF8_DFA_REJECT)
+      break;
+  }
+  return prefix;
+}
 
-    v = (v << 8) | p[2];
-    /* 1110xxxx 10xxxxxx 10xxxxxx */
-    if ((v & 0xF0C0C0) == 0xE08080) {
-      /* Ensure that the top 5 bits is not zero and not a surrogate */
-      v = v & 0x0F2000;
-      if (v == 0 || v == 0x0D2000)
-        break;
-      cur += 3;
-      continue;
-    }
+static inline bool utf8_check(const char* src,
+                              size_t slen,
+                              size_t* cursor) {
+  const unsigned char* s = (const unsigned char*)src;
+  size_t len = slen;
+  utf8_dfa_state_t state = UTF8_DFA_ACCEPT;
 
-    v = (v << 8) | p[3];
-    /* 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx */
-    if ((v & 0xF8C0C0C0) == 0xF0808080) {
-      /* Ensure that the top 5 bits is not zero and not out of range */
-      v = v & 0x07300000;
-      if (v == 0 || v > 0x04000000)
-        break;
-      cur += 4;
-      continue;
-    }
+  // Process 16-byte chunks
+  while (len >= 16) {
+    state = utf8_dfa_run16(state, s);
+    s += 16;
+    len -= 16;
+  }
 
-    break;
+  state = utf8_dfa_run(state, s, len);
+  if (state == UTF8_DFA_ACCEPT) {
+    if (cursor)
+      *cursor = slen;
+    return true;
   }
 
   if (cursor)
-    *cursor = (const char *)cur - src;
-
-  return cur == end;
+    *cursor = utf8_maximal_prefix(src, slen);
+  return false;
 }
 
-bool
-utf8_valid(const char *src, size_t len) {
+static inline bool utf8_valid(const char* src, size_t len) {
   return utf8_check(src, len, NULL);
 }
 
-size_t
-utf8_maximal_subpart(const char *src, size_t len) {
-  const unsigned char *cur = (const unsigned char *)src;
-  uint32_t v;
+static inline bool utf8_check_ascii_block16(const unsigned char *s) {
+#if defined(UTF8_VALID_HAS_SSE2)
+  __m128i v = _mm_loadu_si128((const __m128i *)s);
+  return _mm_movemask_epi8(v) == 0;
+#elif defined(UTF8_VALID_HAS_NEON)
+  uint8x16_t v = vld1q_u8(s);
+  uint8x16_t high = vshrq_n_u8(v, 7);
+  return vmaxvq_u8(high) == 0;
+#else
+  uint64_t v1, v2;
+  memcpy(&v1, s, sizeof(v1));
+  memcpy(&v2, s + sizeof(v1), sizeof(v2));
+  v1 |= v2;
+  return (v1 & UINT64_C(0x8080808080808080)) == 0;
+#endif
+}
 
-  if (len < 2)
-    return len;
+static inline bool utf8_check_ascii(const char* src, size_t slen, size_t* cursor) {
+  const unsigned char* s = (const unsigned char*)src;
+  size_t len = slen;
+  utf8_dfa_state_t state = UTF8_DFA_ACCEPT;
 
-  v = (cur[0] << 8) | cur[1];
-  if ((v & 0xC0C0) != 0xC080)
-    return 1;
-
-  if ((v & 0x2000) == 0) {
-    v = v & 0x1E00;
-    if (v == 0)
-      return 1;
-    return 2;
+  // Process 16-byte chunks; skip DFA when state is clean and chunk is ASCII
+  while (len >= 16) {
+    if (state != UTF8_DFA_ACCEPT || !utf8_check_ascii_block16(s))
+      state = utf8_dfa_run16(state, s);
+    s += 16;
+    len -= 16;
   }
 
-  if ((v & 0x1000) == 0) {
-    v = v & 0x0F20;
-    if (v == 0 || v == 0x0D20)
-      return 1;
-    if (len < 3 || (cur[2] & 0xC0) != 0x80)
-      return 2;
-    return 3;
+  state = utf8_dfa_run(state, s, len);
+  if (state == UTF8_DFA_ACCEPT) {
+    if (cursor)
+      *cursor = slen;
+    return true;
   }
 
-  if ((v & 0x0800) == 0) {
-    v = v & 0x0730;
-    if (v == 0 || v > 0x0400)
-      return 1;
-    if (len < 3 || (cur[2] & 0xC0) != 0x80)
-      return 2;
-    if (len < 4 || (cur[3] & 0xC0) != 0x80)
-      return 3;
-    return 4;
-  }
+  if (cursor)
+    *cursor = utf8_maximal_prefix(src, slen);
+  return false;
+}
 
-  return 1;
+static inline bool utf8_valid_ascii(const char *src, size_t len) {
+  return utf8_check_ascii(src, len, NULL);
 }
 
 #ifdef __cplusplus
 }
 #endif
 #endif
-
