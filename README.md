@@ -658,7 +658,7 @@ to track regression and quantify gains from the current DFA approach.
 
 ## License
 
-BSD 2-Clause License. Copyright (c) 2017–2026 Christian Hansen.
+MIT License. Copyright (c) 2017–2026 Christian Hansen.
 
 ## See Also
 
