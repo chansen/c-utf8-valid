@@ -106,8 +106,16 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
   size_t carried = s->pending;
   size_t consumed = 0;
   size_t chunk_bytes = 0;
+  size_t i = 0;
 
-  for (size_t i = 0; i < len; i++) {
+  while (state == UTF8_DFA_ACCEPT && carried == 0 && len - i >= 16) {
+    if (utf8_dfa_run16(UTF8_DFA_ACCEPT, p + i) != UTF8_DFA_ACCEPT)
+      break;
+    i += 16;
+    consumed = i;
+  }
+
+  for (; i < len; i++) {
     state = utf8_dfa_step(state, p[i]);
     chunk_bytes++;
 

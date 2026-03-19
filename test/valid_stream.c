@@ -88,6 +88,29 @@ test_streaming(void) {
          UTF8_VALID_STREAM_OK, 9, 0);
 
   utf8_valid_stream_init(&st);
+  STREAM("16-byte ASCII block", &st, "abcdefghijklmnop", 16, true,
+         UTF8_VALID_STREAM_OK, 16, 0);
+
+  utf8_valid_stream_init(&st);
+  STREAM("32-byte ASCII blocks", &st,
+         "abcdefghijklmnopqrstuvwxyz012345", 32, true,
+         UTF8_VALID_STREAM_OK, 32, 0);
+
+  utf8_valid_stream_init(&st);
+  STREAM("block then partial lead", &st, "abcdefghijklmnop\xC3", 17, false,
+         UTF8_VALID_STREAM_PARTIAL, 16, 0);
+  STREAM("complete lead after block", &st, "\xA9", 1, true,
+         UTF8_VALID_STREAM_OK, 1, 0);
+
+  utf8_valid_stream_init(&st);
+  STREAM("reject at block end", &st, "abcdefghijklmno\x80", 16, false,
+         UTF8_VALID_STREAM_ILLFORMED, 15, 1);
+
+  utf8_valid_stream_init(&st);
+  STREAM("reject after clean block", &st, "abcdefghijklmnop\x80", 17, false,
+         UTF8_VALID_STREAM_ILLFORMED, 16, 1);
+
+  utf8_valid_stream_init(&st);
   STREAM("invalid mid-chunk", &st, "ab\x80""cd", 5, false,
          UTF8_VALID_STREAM_ILLFORMED, 2, 1);
 
