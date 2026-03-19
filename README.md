@@ -280,14 +280,24 @@ chunk that belong to it. Resume validation at `src[consumed + advance]`.
 utf8_valid_stream_t s;
 utf8_valid_stream_init(&s);
 
-while ((chunk = next_chunk(&len)) != NULL) {
-  bool eof = is_last_chunk();
-  utf8_valid_stream_result_t r = utf8_valid_stream_check(&s, chunk, len, eof);
+size_t stream_offset = 0;
+bool valid = true;
 
-  if (r.status == UTF8_VALID_STREAM_ILLFORMED ||
-      r.status == UTF8_VALID_STREAM_TRUNCATED) {
-    chunk += r.consumed + r.advance;
-    len   -= r.consumed + r.advance;
+while (valid && (len = read_chunk(buf, sizeof buf)) > 0) {
+  bool eof = len < sizeof buf;
+  utf8_valid_stream_result_t r = utf8_valid_stream_check(&s, buf, len, eof);
+
+  switch (r.status) {
+  case UTF8_VALID_STREAM_OK:
+  case UTF8_VALID_STREAM_PARTIAL:
+    stream_offset += len;
+    break;
+  case UTF8_VALID_STREAM_ILLFORMED:
+  case UTF8_VALID_STREAM_TRUNCATED:
+    stream_offset += r.consumed + r.advance;
+    handle_error(stream_offset);
+    valid = false;
+    break;
   }
 }
 ```
@@ -373,28 +383,14 @@ int utf8_decode_next_replace(const char *src, size_t len, uint32_t *codepoint);
 Never returns a negative value; returns `0` only when `len` is 0.
 
 ```c
-utf8_valid_stream_t s;
-utf8_valid_stream_init(&s);
-
-size_t stream_offset = 0;
-bool valid = true;
-
-while (valid && (len = read_chunk(buf, sizeof buf)) > 0) {
-  bool eof = len < sizeof buf;
-  utf8_valid_stream_result_t r = utf8_valid_stream_check(&s, buf, len, eof);
-
-  switch (r.status) {
-  case UTF8_VALID_STREAM_OK:
-  case UTF8_VALID_STREAM_PARTIAL:
-    stream_offset += len;
+while (len > 0) {
+  uint32_t cp;
+  int n = utf8_decode_next_replace(src, len, &cp);
+  if (n == 0)
     break;
-  case UTF8_VALID_STREAM_ILLFORMED:
-  case UTF8_VALID_STREAM_TRUNCATED:
-    stream_offset += r.consumed + r.advance;
-    handle_error(stream_offset);
-    valid = false;
-    break;
-  }
+  process(cp); // U+FFFD for any ill-formed sequence
+  src += n; 
+  len -= n;
 }
 ```
 
