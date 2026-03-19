@@ -577,13 +577,13 @@ Documents are retrieved from Wikipedia and converted to plain text, available in
 
 | File   |   Size | Code points | Distribution          | Best `utf8_valid` | Best `utf8_valid_ascii` |
 | :---   |   ---: |        ---: | :---                  |      ---: |       ---: |
-| ar.txt |  25 KB |         14K | 19% ASCII, 81% 2-byte | 4110 MB/s |  5099 MB/s |
-| el.txt | 102 KB |         59K | 23% ASCII, 77% 2-byte | 4110 MB/s |  5010 MB/s |
-| en.txt |  80 KB |         82K | 99.9% ASCII           | 4109 MB/s | 35918 MB/s |
-| ja.txt | 176 KB |         65K | 11% ASCII, 89% 3-byte | 4110 MB/s |  5211 MB/s |
-| lv.txt | 135 KB |        127K | 92% ASCII, 7% 2-byte  | 4109 MB/s |  6165 MB/s |
-| ru.txt | 148 KB |         85K | 23% ASCII, 77% 2-byte | 4109 MB/s |  3937 MB/s |
-| sv.txt |  94 KB |         93K | 96% ASCII, 4% 2-byte  | 4109 MB/s |  8767 MB/s |
+| ar.txt |  25 KB |         14K | 19% ASCII, 81% 2-byte | 4102 MB/s |  5103 MB/s |
+| el.txt | 102 KB |         59K | 23% ASCII, 77% 2-byte | 4104 MB/s |  5006 MB/s |
+| en.txt |  80 KB |         82K | 99.9% ASCII           | 4108 MB/s | 33103 MB/s |
+| ja.txt | 176 KB |         65K | 11% ASCII, 89% 3-byte | 4109 MB/s |  5223 MB/s |
+| lv.txt | 135 KB |        127K | 92% ASCII, 7% 2-byte  | 4111 MB/s |  6151 MB/s |
+| ru.txt | 148 KB |         85K | 23% ASCII, 77% 2-byte | 4109 MB/s |  4010 MB/s |
+| sv.txt |  94 KB |         93K | 96% ASCII, 4% 2-byte  | 4104 MB/s |  8775 MB/s |
 
 Best numbers from Clang 20 `-O3 -march=x86-64-v3` (Raptor Lake).
 
@@ -593,23 +593,23 @@ Best numbers from Clang 20 `-O3 -march=x86-64-v3` (Raptor Lake).
 
 | Flags                  | `utf8_valid` | `utf8_valid_ascii` | Notes                                     |
 | :---                   |         ---: |               ---: | :---                                      |
-| `-O2`                  |    2711 MB/s |          2848 MB/s | ascii fast path competitive on multibyte  |
-| `-O2 -march=x86-64-v3` |    4101 MB/s |          3979 MB/s | BMI2 `SHRX` eliminates `CL` constraint    |
-| `-O3 -march=x86-64-v3` |    4096 MB/s |          5099 MB/s | fast path profitable on all content types |
+| `-O2`                  |    2710 MB/s |          2849 MB/s | ascii fast path competitive on multibyte  |
+| `-O2 -march=x86-64-v3` |    4097 MB/s |          3982 MB/s | BMI2 `SHRX` eliminates `CL` constraint    |
+| `-O3 -march=x86-64-v3` |    4102 MB/s |          5103 MB/s | fast path profitable on all content types |
 
 Numbers shown for ar.txt (81% 2-byte). On near-pure ASCII (en.txt) `utf8_valid_ascii`
-reaches 29–33 GB/s at `-O3`.
+reaches 25–33 GB/s at `-O3`.
 
 ### Raptor Lake (GCC 14, x86-64)
 
-| Flags                  | `utf8_valid` | `utf8_valid_ascii` | Notes                                  |
-| :---                   |         ---: |               ---: | :---                                   |
-| `-O2`                  |    2871 MB/s |          2692 MB/s | unroll fix brings GCC close to Clang   |
-| `-O2 -march=x86-64-v3` |    4102 MB/s |          3952 MB/s | BMI2 `SHRX` eliminates `CL` constraint |
-| `-O3 -march=x86-64-v3` |    4099 MB/s |          3954 MB/s | essentially equal to `-O2` with SHRX   |
+| Flags                  | `utf8_valid` | `utf8_valid_ascii` | Notes                                    |
+| :---                   |         ---: |               ---: | :---                                     |
+| `-O2`                  |    2731 MB/s |          2642 MB/s | ascii fast path competitive on multibyte |
+| `-O2 -march=x86-64-v3` |    4103 MB/s |          3996 MB/s | BMI2 `SHRX` eliminates `CL` constraint   |
+| `-O3 -march=x86-64-v3` |    4106 MB/s |          3979 MB/s | essentially equal to `-O2` with SHRX     |
 
 Numbers shown for ar.txt (81% 2-byte). On near-pure ASCII (en.txt) `utf8_valid_ascii`
-reaches 32–36 GB/s at `-O2 -march=x86-64-v3`.
+reaches 36–39 GB/s at `-O3`.
 
 ### Haswell (Clang 22, x86-64)
 
@@ -626,22 +626,22 @@ reaches 14–18 GB/s at all optimization levels.
 
 | Flags                 | `utf8_valid` | `utf8_valid_ascii` | Notes                              |
 | :---                  |         ---: |               ---: | :---                               |
-| `-O2`                 |    2604 MB/s |          2661 MB/s | essentially equal on multibyte     |
-| `-O2 -mtune=apple-m1` |    2745 MB/s |          2560 MB/s | essentially equal on multibyte     |
-| `-O3`                 |    2726 MB/s |          4677 MB/s | O3 unlocks NEON fast path          |
-| `-O3 -mtune=apple-m1` |    2760 MB/s |          4704 MB/s | mtune negligible at `-O3`          |
+| `-O2`                 |    2774 MB/s |          2646 MB/s | essentially equal on multibyte     |
+| `-O2 -mtune=apple-m1` |    2714 MB/s |          2701 MB/s | essentially equal on multibyte     |
+| `-O3`                 |    2798 MB/s |          5033 MB/s | O3 unlocks NEON fast path          |
+| `-O3 -mtune=apple-m1` |    2771 MB/s |          4977 MB/s | mtune negligible at `-O3`          |
 
 Numbers shown for ar.txt (81% 2-byte). On near-pure ASCII (en.txt) `utf8_valid_ascii`
 reaches ~20 GB/s at `-O3`.
 
 ### Apple M1 (GCC 15, AArch64)
 
-| Flags                 | `utf8_valid` | `utf8_valid_ascii` | Notes                                  |
-| :---                  |         ---: |               ---: | :---                                   |
-| `-O2`                 |    2704 MB/s |          2620 MB/s | unroll fix brings GCC close to Clang   |
-| `-O2 -mtune=apple-m1` |    2711 MB/s |          2597 MB/s | mtune no effect                        |
-| `-O3`                 |    2714 MB/s |          2573 MB/s | essentially equal to `-O2`             |
-| `-O3 -mtune=apple-m1` |    2701 MB/s |          2700 MB/s | essentially equal on multibyte         |
+| Flags                 | `utf8_valid` | `utf8_valid_ascii` | Notes                           |
+| :---                  |         ---: |               ---: | :---                            |
+| `-O2`                 |    2797 MB/s |          2669 MB/s | comparable to Clang             |
+| `-O2 -mtune=apple-m1` |    2754 MB/s |          2633 MB/s | mtune no effect                 |
+| `-O3`                 |    2729 MB/s |          2588 MB/s | essentially equal to `-O2`      |
+| `-O3 -mtune=apple-m1` |    2778 MB/s |          2659 MB/s | essentially equal on multibyte  |
 
 Numbers shown for ar.txt (81% 2-byte). On near-pure ASCII (en.txt) `utf8_valid_ascii`
 reaches ~35 GB/s at `-O3`.
