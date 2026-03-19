@@ -1,4 +1,4 @@
-# c-utf8-valid
+# c-utf8
 
 A fast, header-only UTF-8 library in C implementing validation, decoding,
 and transcoding conforming to the Unicode and ISO/IEC 10646 specifications.
@@ -228,30 +228,54 @@ reports failure, with `src` advanced to the cursor position.
 Requires `utf8_dfa32.h` or `utf8_dfa64.h`.
 
 ```c
-typedef struct { utf8_dfa_state_t state; } utf8_valid_stream_t;
+typedef enum {
+  UTF8_VALID_STREAM_OK,         // src fully consumed, no errors
+  UTF8_VALID_STREAM_PARTIAL,    // src fully consumed, ends mid-sequence
+  UTF8_VALID_STREAM_ILLFORMED,  // stopped at an ill-formed subsequence
+  UTF8_VALID_STREAM_TRUNCATED,  // eof is true and src ends mid-sequence
+} utf8_valid_stream_status_t;
+
+typedef struct {
+  utf8_valid_stream_status_t status;
+  size_t consumed;            // bytes read from src.
+  size_t advance;             // bytes to skip on ILLFORMED or TRUNCATED, else 0
+} utf8_valid_stream_result_t;
+
+typedef struct {
+  utf8_dfa_state_t state;
+  size_t pending;
+} utf8_valid_stream_t;
 
 void   utf8_valid_stream_init(utf8_valid_stream_t *s);
-size_t utf8_valid_stream_check(utf8_valid_stream_t *s,
-                               const char *src, size_t len,
-                               bool eof, size_t *cursor);
+utf8_valid_stream_result_t utf8_valid_stream_check(utf8_valid_stream_t *s,
+                                                   const char *src, 
+                                                   size_t len,
+                                                   bool eof);
 ```
 
 **`utf8_valid_stream_init`** initialises a stream validator. Call this before
 the first `utf8_valid_stream_check`.
 
-**`utf8_valid_stream_check`** validates the next chunk of a UTF-8 byte
-stream. Returns the number of bytes in `src[0..len)` that form complete valid
-sequences. The caller should feed consecutive, non-overlapping byte ranges
-from the stream on each call; any bytes beyond the returned count are already
-consumed by the DFA and carried in the stream state.
+**`utf8_valid_stream_check`** validates `src[0..len)` as the next chunk of a
+UTF-8 byte stream. `eof` should be `true` only for the final chunk. The DFA
+state is carried in `utf8_valid_stream_t` across calls.
 
-If `eof` is `true` and the stream does not end on a sequence boundary, the
-chunk is treated as ill-formed.
+If the chunk is well-formed and ends on a sequence boundary, status is `OK`.
+If the chunk ends in the middle of a sequence and `eof` is `false`, status is
+`PARTIAL`. In both cases, `consumed` is the number of bytes read from `src`
+and `advance` is 0.
 
-On error, returns `(size_t)-1`. If `cursor` is non-NULL, sets `*cursor` to
-the byte offset within `src` of the first invalid or truncated sequence. The
-stream state resets to `ACCEPT` automatically so the caller can resume from
-the next byte without reinitialising.
+If validation stops at an ill-formed sequence, status is `ILLFORMED`. If
+`eof` is `true` and the chunk ends in the middle of a sequence, status is
+`TRUNCATED`.
+
+On `UTF8_VALID_STREAM_ILLFORMED` or `UTF8_VALID_STREAM_TRUNCATED`, the stream
+state resets to `ACCEPT` automatically so the caller can continue without
+reinitialising.
+
+On `ILLFORMED` or `TRUNCATED`, `consumed` is the byte offset of the ill-formed 
+or truncated sequence and `advance` is the number of bytes in the current 
+chunk that belong to it. Resume validation at `src[consumed + advance]`.
 
 ```c
 utf8_valid_stream_t s;
@@ -259,10 +283,12 @@ utf8_valid_stream_init(&s);
 
 while ((chunk = next_chunk(&len)) != NULL) {
   bool eof = is_last_chunk();
-  size_t cursor;
-  size_t n = utf8_valid_stream_check(&s, chunk, len, eof, &cursor);
-  if (n == (size_t)-1) {
-    // ill-formed sequence at chunk[cursor]
+  utf8_valid_stream_result_t r = utf8_valid_stream_check(&s, chunk, len, eof);
+
+  if (r.status == UTF8_VALID_STREAM_ILLFORMED ||
+      r.status == UTF8_VALID_STREAM_TRUNCATED) {
+    chunk += r.consumed + r.advance;
+    len   -= r.consumed + r.advance;
   }
 }
 ```

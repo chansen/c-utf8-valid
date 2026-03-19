@@ -23,9 +23,7 @@
 #ifndef UTF8_VALID_STREAM_H
 #define UTF8_VALID_STREAM_H
 #include <stddef.h>
-#include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
 
 #if defined(UTF8_DFA32_H) && defined(UTF8_DFA64_H)
 #  error "utf8_dfa32.h and utf8_dfa64.h are mutually exclusive"
@@ -38,69 +36,126 @@ extern "C" {
 #endif
 
 /*
- * Streaming API
+ * utf8_valid_stream_status_t -- outcome of a streaming validation step.
  *
- * utf8_valid_stream_t holds the DFA state between calls. Initialize with
- * utf8_valid_stream_init() before the first call to utf8_valid_stream_check().
- *
- * utf8_valid_stream_check() validates the next chunk of a UTF-8 stream and
- * returns the number of bytes forming complete, valid sequences. The caller
- * should feed consecutive, non-overlapping byte ranges from the stream on
- * each call; any bytes beyond the returned count are already consumed by the
- * DFA and carried in the stream state.
- *
- * If eof is true and the stream does not end on a sequence boundary,
- * the input is treated as ill-formed.
- *
- * On error, (size_t)-1 is returned and *cursor, if non-NULL, is set
- * to the byte offset of the start of the invalid or truncated sequence
- * within src. The stream state is automatically reset to UTF8_DFA_ACCEPT so
- * the caller can resume from the next byte without reinitializing.
+ *   UTF8_VALID_STREAM_OK         src fully consumed, no errors.
+ *   UTF8_VALID_STREAM_PARTIAL    src fully consumed, ends in the middle of a sequence.
+ *   UTF8_VALID_STREAM_ILLFORMED  stopped at an ill-formed sequence.
+ *   UTF8_VALID_STREAM_TRUNCATED  eof is true and src ends in the middle of a sequence.
  */
+
+typedef enum {
+  UTF8_VALID_STREAM_OK,
+  UTF8_VALID_STREAM_PARTIAL,
+  UTF8_VALID_STREAM_ILLFORMED,
+  UTF8_VALID_STREAM_TRUNCATED,
+} utf8_valid_stream_status_t;
+
+/*
+ * utf8_valid_stream_result_t -- result of a streaming validation step.
+ *
+ *   status:    outcome of the operation (see utf8_valid_stream_status_t).
+ *   consumed:  bytes read from src.
+ *   advance:   bytes to skip on ILLFORMED or TRUNCATED, else 0.
+ *              Resume at src[consumed + advance].
+ */
+typedef struct {
+  utf8_valid_stream_status_t status;
+  size_t consumed;
+  size_t advance;
+} utf8_valid_stream_result_t;
 
 typedef struct {
   utf8_dfa_state_t state;
+  size_t pending;
 } utf8_valid_stream_t;
 
 static inline void
 utf8_valid_stream_init(utf8_valid_stream_t *s) {
   s->state = UTF8_DFA_ACCEPT;
+  s->pending = 0;
 }
 
-static inline size_t utf8_valid_stream_check(utf8_valid_stream_t* s,
-                                             const char* src,
-                                             size_t len,
-                                             bool eof,
-                                             size_t* cursor) {
+/*
+ * utf8_valid_stream_check -- validate the next chunk of a UTF-8 stream.
+ *
+ * src[0..len) is the next chunk. eof should be true only for the final chunk.
+ * The DFA state is carried in s across calls.
+ *
+ * Returns a utf8_valid_stream_result_t describing the outcome:
+ *
+ *   status:
+ *     UTF8_VALID_STREAM_OK         src fully consumed, no errors.
+ *     UTF8_VALID_STREAM_PARTIAL    src fully consumed, ends in the middle of a sequence.
+ *     UTF8_VALID_STREAM_ILLFORMED  stopped at an ill-formed sequence.
+ *     UTF8_VALID_STREAM_TRUNCATED  eof is true and src ends in the middle of a sequence.
+ *
+ *   consumed:  bytes read from src.
+ *   advance:   bytes to skip on ILLFORMED or TRUNCATED, else 0.
+ *              Resume at src[consumed + advance].
+ *
+ * On ILLFORMED or TRUNCATED the stream state is reset to UTF8_DFA_ACCEPT.
+ */
+static inline utf8_valid_stream_result_t
+utf8_valid_stream_check(utf8_valid_stream_t* s,
+                        const char* src,
+                        size_t len,
+                        bool eof) {
   const unsigned char* p = (const unsigned char*)src;
   utf8_dfa_state_t state = s->state;
-  size_t last_accept = 0;
+  size_t carried = s->pending;
+  size_t consumed = 0;
+  size_t chunk_bytes = 0;
 
   for (size_t i = 0; i < len; i++) {
     state = utf8_dfa_step(state, p[i]);
-    if (state == UTF8_DFA_ACCEPT)
-      last_accept = i + 1;
-    else if (state == UTF8_DFA_REJECT) {
-      s->state = UTF8_DFA_ACCEPT;
-      if (cursor)
-        *cursor = last_accept;
-      return (size_t)-1;
+    chunk_bytes++;
+
+    if (state == UTF8_DFA_ACCEPT) {
+      consumed = i + 1;
+      carried = 0;
+      chunk_bytes = 0;
     }
+    else if (state == UTF8_DFA_REJECT) {
+      size_t total = carried + chunk_bytes;
+      size_t advance = total > 1 ? chunk_bytes - 1 : 1;
+      s->state = UTF8_DFA_ACCEPT;
+      s->pending = 0;
+      return (utf8_valid_stream_result_t){
+        .status   = UTF8_VALID_STREAM_ILLFORMED,
+        .consumed = carried ? 0 : consumed,
+        .advance  = advance,
+      };
+    }
+  }
+
+  if (state == UTF8_DFA_ACCEPT) {
+    s->state = UTF8_DFA_ACCEPT;
+    s->pending = 0;
+    return (utf8_valid_stream_result_t){
+      .status   = UTF8_VALID_STREAM_OK,
+      .consumed = len,
+      .advance  = 0,
+    };
+  }
+
+  if (eof) {
+    s->state = UTF8_DFA_ACCEPT;
+    s->pending = 0;
+    return (utf8_valid_stream_result_t){
+      .status   = UTF8_VALID_STREAM_TRUNCATED,
+      .consumed = carried ? 0 : consumed,
+      .advance  = chunk_bytes,
+    };
   }
 
   s->state = state;
-
-  if (state != UTF8_DFA_ACCEPT) {
-    if (eof) {
-      s->state = UTF8_DFA_ACCEPT;
-      if (cursor)
-        *cursor = last_accept;
-      return (size_t)-1;
-    }
-    return last_accept;
-  }
-
-  return len;
+  s->pending = carried + chunk_bytes;
+  return (utf8_valid_stream_result_t){
+    .status   = UTF8_VALID_STREAM_PARTIAL,
+    .consumed = consumed,
+    .advance  = 0,
+  };
 }
 
 #ifdef __cplusplus
