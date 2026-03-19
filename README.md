@@ -216,7 +216,8 @@ Throughput advantage depends on content mix and microarchitecture; see the
 [Performance](#performance) section.
 
 **`utf8_maximal_subpart`** returns the length of the maximal subpart of the
-ill-formed sequence starting at `src[0..len)`, as defined by Unicode. 
+ill-formed sequence starting at `src[0..len)`, as defined by Unicode 
+(see [Error handling and U+FFFD replacement](#error-handling-and-ufffd-replacement)). 
 The return value is always >= 1. Call this after `utf8_check`reports failure, 
 with `src` advanced to the cursor position.
 
@@ -522,10 +523,10 @@ outright.
 ### Maximal subpart
 
 The number of U+FFFD characters to emit per ill-formed sequence is determined
-by the *maximal subpart* rule, defined in Unicode 17.0 Table 3-8. A maximal
-subpart is the longest prefix of an ill-formed sequence that is either the
-start of an otherwise well-formed sequence, or a single byte. Each maximal
-subpart produces exactly one U+FFFD.
+by the *maximal subpart* rule, defined in [Unicode 17.0 Table 3-8](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/#G66453). 
+A maximal subpart is the longest prefix of an ill-formed sequence that is 
+either the start of an otherwise well-formed sequence, or a single byte. Each 
+maximal subpart produces exactly one U+FFFD.
 
 For example, the byte sequence `\xF0\x80\x80` is a truncated 4-byte sequence:
 `\xF0` is a valid 4-byte lead followed by two valid continuation bytes, but a
@@ -651,7 +652,7 @@ reaches ~35 GB/s at `-O3`.
   compilers in these measurements. Across all tested platforms, `utf8_valid`
   processes approximately one byte per clock cycle at peak throughput,
   consistent with the unrolled DFA loop executing one table lookup and one shift
-  per byte, pipelined by the out-of-order engine across the 16-byte unroll.
+  per byte.
 - On x86, `-march=x86-64-v3` or `-march=native` enables BMI2 `SHRX`, which
   removes the variable-shift dependency on `CL` and roughly doubles throughput
   for `utf8_valid`.
