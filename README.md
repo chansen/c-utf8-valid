@@ -75,8 +75,7 @@ are all structurally rejected.
 ### Reverse DFA
 
 The reverse DFA scans bytes right-to-left and is used for backward navigation
-and backward decoding, moving a cursor back by N codepoints without scanning
-from the start of the string.
+and backward decoding and moving a cursor back by N codepoints.
 
 Going forward you see the lead byte first and know immediately how many
 continuation bytes follow and what constraints apply to them. Going in
@@ -214,12 +213,12 @@ ill-formed sequence (the length of the maximal valid prefix).
 with a 16-byte ASCII fast path that skips the DFA for chunks containing only
 ASCII bytes. Behaviour is identical to `utf8_valid` and `utf8_check`.
 Throughput advantage depends on content mix and microarchitecture; see the
-Performance section.
+[Performance](#performance) section.
 
 **`utf8_maximal_subpart`** returns the length of the maximal subpart of the
-ill-formed sequence starting at `src[0..len)`, as defined by Unicode 17.0
-Table 3-8. The return value is always >= 1. Call this after `utf8_check`
-reports failure, with `src` advanced to the cursor position.
+ill-formed sequence starting at `src[0..len)`, as defined by Unicode. 
+The return value is always >= 1. Call this after `utf8_check`reports failure, 
+with `src` advanced to the cursor position.
 
 ---
 
@@ -374,14 +373,28 @@ int utf8_decode_next_replace(const char *src, size_t len, uint32_t *codepoint);
 Never returns a negative value; returns `0` only when `len` is 0.
 
 ```c
-while (len > 0) {
-  uint32_t cp;
-  int n = utf8_decode_next_replace(src, len, &cp);
-  if (n == 0)
+utf8_valid_stream_t s;
+utf8_valid_stream_init(&s);
+
+size_t stream_offset = 0;
+bool valid = true;
+
+while (valid && (len = read_chunk(buf, sizeof buf)) > 0) {
+  bool eof = len < sizeof buf;
+  utf8_valid_stream_result_t r = utf8_valid_stream_check(&s, buf, len, eof);
+
+  switch (r.status) {
+  case UTF8_VALID_STREAM_OK:
+  case UTF8_VALID_STREAM_PARTIAL:
+    stream_offset += len;
     break;
-  process(cp); // U+FFFD for any ill-formed sequence
-  src += n; 
-  len -= n;
+  case UTF8_VALID_STREAM_ILLFORMED:
+  case UTF8_VALID_STREAM_TRUNCATED:
+    stream_offset += r.consumed + r.advance;
+    handle_error(stream_offset);
+    valid = false;
+    break;
+  }
 }
 ```
 
@@ -462,13 +475,39 @@ ill-formed sequence and `advance` is the length of its maximal subpart
 Resume transcoding at `src[consumed + advance]`.
 
 ```c
+// Simple case: replace ill-formed sequences with U+FFFD
+uint16_t dst[256];
 utf8_transcode_result_t r;
 do {
-  r = utf8_transcode_utf16(src, src_len, dst, dst_len);
+  r = utf8_transcode_utf16_replace(src, src_len, dst, sizeof dst);
   flush(dst, r.written);
   src     += r.consumed;
   src_len -= r.consumed;
 } while (r.status == UTF8_TRANSCODE_EXHAUSTED);
+
+// Strict case: stop on ill-formed input
+while (src_len > 0) {
+  utf8_transcode_result_t r = utf8_transcode_utf16(src, src_len, dst, sizeof dst);
+  flush(dst, r.written);
+
+  switch (r.status) {
+  case UTF8_TRANSCODE_OK:
+  case UTF8_TRANSCODE_EXHAUSTED:
+    src     += r.consumed;
+    src_len -= r.consumed;
+    break;
+  case UTF8_TRANSCODE_ILLFORMED:
+  case UTF8_TRANSCODE_TRUNCATED:
+    handle_error(src + r.consumed, r.advance);
+    src     += r.consumed + r.advance;
+    src_len -= r.consumed + r.advance;
+    break;
+  }
+
+  if (r.status == UTF8_TRANSCODE_OK ||
+    r.status == UTF8_TRANSCODE_TRUNCATED)
+    break;
+}
 ```
 
 For UTF-32, `result.written` always equals `result.decoded` since each
@@ -500,8 +539,8 @@ hand, each form their own maximal subpart of length 1 and produce two U+FFFD.
 
 ### Standards requirements
 
-Unicode 17.0 §3.9 recommends, and the
-[WHATWG Encoding Standard](https://encoding.spec.whatwg.org/#utf-8-decoder)
+[Unicode 17.0 §3.9 recommends](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/#G66453), 
+and the [WHATWG Encoding Standard](https://encoding.spec.whatwg.org/#utf-8-decoder)
 requires, that decoders replace each maximal subpart of an ill-formed
 sequence with exactly one U+FFFD. This is the behaviour implemented by
 `utf8_decode_next_replace`,
@@ -519,9 +558,9 @@ the `_replace` variants.
 All routines in this library are safe to use on untrusted input.
 
 **All decoded codepoints are within the Unicode scalar value range.** The DFA
-structurally rejects non-shortest-form encodings, surrogates (U+D800–U+DFFF), 
-and codepoints above U+10FFFF. These cannot appear in the output of any 
-decoding or transcoding function.
+structurally rejects non-shortest-form encodings, surrogate halves 
+(U+D800–U+DFFF), and codepoints above U+10FFFF. These cannot appear in the 
+output of any decoding or transcoding function.
 
 **No dynamic allocation.** All functions operate on caller-supplied buffers
 with no heap allocation, no global mutable state, and no use of `errno`.
@@ -620,14 +659,12 @@ reaches ~35 GB/s at `-O3`.
 - On x86, `-march=x86-64-v3` or `-march=native` enables BMI2 `SHRX`, which
   removes the variable-shift dependency on `CL` and roughly doubles throughput
   for `utf8_valid`.
-- GCC and Clang produce comparable throughput on all tested platforms.
 - `utf8_valid_ascii` profitability on multibyte content is microarchitecture
   dependent. On Haswell it is slower than `utf8_valid` on multibyte-heavy input
   at all tested flags. On Raptor Lake and Apple M1 with Clang `-O3` it is
   faster on all content types.
 - On Apple M1 with Clang, `utf8_valid_ascii` is essentially equal to
-  `utf8_valid` on multibyte content at `-O2`, and significantly faster at `-O3`
-  where the NEON fast path vectorizes aggressively.
+  `utf8_valid` on multibyte content at `-O2`, and significantly faster at `-O3`.
 - On Apple M1 with GCC 15, both implementations perform comparably to Clang
   at `-O2`. `utf8_valid_ascii` on near-pure ASCII reaches ~35 GB/s at `-O3`.
 
