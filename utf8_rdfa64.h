@@ -398,8 +398,8 @@ static inline utf8_rdfa_state_t utf8_rdfa_run(utf8_rdfa_state_t state,
                                               const unsigned char* src,
                                               size_t len) {
   while (len > 0)
-    state = utf8_rdfa_step(state, src[--len]);
-  return state;
+    state = utf8_rdfa[src[--len]] >> (state & 63);
+  return state & 63;
 }
 
 #ifdef __cplusplus

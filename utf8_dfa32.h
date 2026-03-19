@@ -366,16 +366,16 @@ static inline utf8_dfa_state_t utf8_dfa_run(utf8_dfa_state_t state,
                                             const unsigned char* src,
                                             size_t len) {
   for (size_t i = 0; i < len; i++)
-    state = utf8_dfa_step(state, src[i]);
-  return state;
+    state = utf8_dfa[src[i]] >> (state & 31);
+  return state & 31;
 }
 
 static inline utf8_dfa_state_t utf8_dfa_run16(utf8_dfa_state_t state,
                                               const unsigned char* src) {
   #pragma GCC unroll 16
   for (size_t i = 0; i < 16; i++)
-    state = utf8_dfa_step(state, src[i]);
-  return state;
+    state = utf8_dfa[src[i]] >> (state & 31);
+  return state & 31;
 }
 
 #ifdef __cplusplus
