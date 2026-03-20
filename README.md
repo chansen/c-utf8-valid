@@ -102,6 +102,10 @@ a mask:
 state = (table[byte] >> state) & mask;
 ```
 
+The error state is fixed at offset 0. Any transition to error contributes
+`(0 << 0) = 0` to the row value, which is itself the error state at every
+bit offset. Once entered, no byte can leave it.
+
 The 32-bit row packing technique was derived by
 [Dougall Johnson](https://gist.github.com/dougallj/166e326de6ad4cf2c94be97a204c025f);
 state offsets are chosen by an SMT solver (`tool/smt_solver.py`) to pack all
