@@ -56,12 +56,14 @@ typedef enum {
  *
  *   status:    outcome of the operation (see utf8_valid_stream_status_t).
  *   consumed:  bytes read from src.
+ *   pending:   bytes of an incomplete trailing sequence on PARTIAL, else 0.
  *   advance:   bytes to skip on ILLFORMED or TRUNCATED, else 0.
  *              Resume at src[consumed + advance].
  */
 typedef struct {
   utf8_valid_stream_status_t status;
   size_t consumed;
+  size_t pending;
   size_t advance;
 } utf8_valid_stream_result_t;
 
@@ -91,6 +93,7 @@ utf8_valid_stream_init(utf8_valid_stream_t *s) {
  *     UTF8_VALID_STREAM_TRUNCATED  eof is true and src ends in the middle of a sequence.
  *
  *   consumed:  bytes read from src.
+ *   pending:   bytes of an incomplete trailing sequence on PARTIAL, else 0.
  *   advance:   bytes to skip on ILLFORMED or TRUNCATED, else 0.
  *              Resume at src[consumed + advance].
  *
@@ -108,10 +111,12 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
   size_t chunk_bytes = 0;
   size_t i = 0;
 
-  while (state == UTF8_DFA_ACCEPT && carried == 0 && len - i >= 16) {
-    if (utf8_dfa_run16(UTF8_DFA_ACCEPT, p + i) != UTF8_DFA_ACCEPT)
-      break;
-    i += 16;
+  if (state == UTF8_DFA_ACCEPT && len >= 16) {
+    do {
+      if (utf8_dfa_run16(UTF8_DFA_ACCEPT, p + i) != UTF8_DFA_ACCEPT)
+        break;
+      i += 16;
+    } while (len - i >= 16);
     consumed = i;
   }
 
@@ -132,6 +137,7 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
       return (utf8_valid_stream_result_t){
         .status   = UTF8_VALID_STREAM_ILLFORMED,
         .consumed = carried ? 0 : consumed,
+        .pending  = 0,
         .advance  = advance,
       };
     }
@@ -143,6 +149,7 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
     return (utf8_valid_stream_result_t){
       .status   = UTF8_VALID_STREAM_OK,
       .consumed = len,
+      .pending  = 0,
       .advance  = 0,
     };
   }
@@ -153,6 +160,7 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
     return (utf8_valid_stream_result_t){
       .status   = UTF8_VALID_STREAM_TRUNCATED,
       .consumed = carried ? 0 : consumed,
+      .pending  = 0,
       .advance  = chunk_bytes,
     };
   }
@@ -162,6 +170,7 @@ utf8_valid_stream_check(utf8_valid_stream_t* s,
   return (utf8_valid_stream_result_t){
     .status   = UTF8_VALID_STREAM_PARTIAL,
     .consumed = consumed,
+    .pending  = carried + chunk_bytes,
     .advance  = 0,
   };
 }

@@ -231,6 +231,7 @@ typedef enum {
 typedef struct {
   utf8_valid_stream_status_t status;
   size_t consumed;            // bytes read from src.
+  size_t pending;             // bytes in an incomplete trailing sequence, else 0
   size_t advance;             // bytes to skip on ILLFORMED or TRUNCATED, else 0
 } utf8_valid_stream_result_t;
 
@@ -255,8 +256,9 @@ state is carried in `utf8_valid_stream_t` across calls.
 
 If the chunk is well-formed and ends on a sequence boundary, status is `OK`.
 If the chunk ends in the middle of a sequence and `eof` is `false`, status is
-`PARTIAL`. In both cases, `consumed` is the number of bytes read from `src`
-and `advance` is 0.
+`PARTIAL`. In both cases, `consumed` is the number of bytes read from `src`.
+On `PARTIAL`, `pending` is the number of bytes in the incomplete trailing
+sequence. On `OK`, `pending` is 0. `advance` is 0 in both cases.
 
 If validation stops at an ill-formed sequence, status is `ILLFORMED`. If
 `eof` is `true` and the chunk ends in the middle of a sequence, status is
@@ -267,8 +269,9 @@ state resets to `ACCEPT` automatically so the caller can continue without
 reinitialising.
 
 On `ILLFORMED` or `TRUNCATED`, `consumed` is the byte offset of the ill-formed 
-or truncated sequence and `advance` is the number of bytes in the current 
-chunk that belong to it. Resume validation at `src[consumed + advance]`.
+or truncated sequence, `pending` is 0, and `advance` is the number of bytes
+in the current chunk that belong to it. Resume validation at
+`src[consumed + advance]`.
 
 ```c
 utf8_valid_stream_t s;
