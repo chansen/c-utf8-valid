@@ -1,7 +1,7 @@
 # c-utf8
 
-A fast, header-only UTF-8 library in C implementing validation, decoding,
-and transcoding conforming to the Unicode and ISO/IEC 10646 specifications.
+A header-only UTF-8 library in C implementing validation, decoding, and 
+transcoding conforming to the Unicode and ISO/IEC 10646 specifications.
 
 ## Usage
 
@@ -40,18 +40,6 @@ Each byte indexes into a 256-entry lookup table and produces the next state.
 Returning to `ACCEPT` marks the end of a complete valid sequence. Reaching
 `REJECT` means an ill-formed byte was encountered; that state is a permanent
 trap and no further input can leave it.
-
-The inner loop is a table load, a shift, and a mask:
-
-```c
-state = (table[byte] >> state) & mask;
-```
-
-Each table row is a packed integer. The current state value is used directly
-as a bit offset into the row to extract the next state, avoiding a second
-lookup. The error state is fixed at offset 0, so any transition to error
-contributes nothing to the row and the trap enforces itself through the
-encoding.
 
 The 9 forward DFA states are:
 
@@ -107,7 +95,8 @@ by [Per Vognsen](https://gist.github.com/pervognsen/218ea17743e1442e59bb60d29b1a
 Each byte maps to a row in a 256-entry table. The row is a packed integer
 where each state's transition target is stored at a fixed bit offset. The
 current state value is used directly as the shift amount to extract the next
-state, giving the branchless inner loop:
+state, avoiding a second lookup. The inner loop is a table load, a shift, and 
+a mask:
 
 ```c
 state = (table[byte] >> state) & mask;
